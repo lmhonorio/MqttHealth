@@ -44,17 +44,19 @@ import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-
 import androidx.compose.runtime.remember
-
 import com.example.mqttwearable.R
 import com.example.mqttwearable.presentation.theme.MqttwearableTheme
+import com.example.mqttwearable.mqtt.MqttHandler
 
 private const val SERVER_URI = "tcp://192.168.0.157:1883"
 private const val TOPIC = "teste"
 
 
 class MainActivity : ComponentActivity() {
+
+    private lateinit var mqttHandler: MqttHandler
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
 
@@ -62,14 +64,38 @@ class MainActivity : ComponentActivity() {
 
         setTheme(android.R.style.Theme_DeviceDefault)
 
+        mqttHandler = MqttHandler(applicationContext)
+
+        // Conectar ao broker
+        CoroutineScope(Dispatchers.IO).launch {
+            mqttHandler.connect(
+                brokerUrl = SERVER_URI,
+                clientId = "wearable-${System.currentTimeMillis()}"
+            ) { success ->
+                if (success) {
+                    Log.d("MainActivity", "Successfully connected to MQTT broker")
+                } else {
+                    Log.e("MainActivity", "Failed to connect to MQTT broker")
+                }
+            }
+        }
+
         setContent {
-            WearApp("Android")
+            WearApp("Android", MqttHandler(applicationContext))
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        CoroutineScope(Dispatchers.IO).launch {
+            mqttHandler.disconnect()
+            Log.d("MainActivity", "MQTT disconnected")
         }
     }
 }
 
 @Composable
-fun WearApp(greetingName: String) {
+fun WearApp(greetingName: String, mqttHandler: MqttHandler) {
     val context = LocalContext.current
     var buttonClicked by remember { mutableStateOf(false) }
 
@@ -101,6 +127,7 @@ fun WearApp(greetingName: String) {
                         // MQTT Connection and Publish
                         CoroutineScope(Dispatchers.IO).launch {
                             try {
+                                mqttHandler.publish(TOPIC, "Button clicked via mqtthandler!")
                                 val persistence = MemoryPersistence()
                                 val client = MqttClient(SERVER_URI, MqttClient.generateClientId(), persistence)
                                 val options = MqttConnectOptions()
@@ -147,5 +174,6 @@ fun Greeting(greetingName: String) {
 @Preview(device = WearDevices.SMALL_ROUND, showSystemUi = true)
 @Composable
 fun DefaultPreview() {
-    WearApp("Preview Android")
+    val context = LocalContext.current
+    WearApp("Preview Android", MqttHandler(context))
 }
