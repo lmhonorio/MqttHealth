@@ -93,7 +93,7 @@ dependencies {
     implementation("androidx.compose.runtime:runtime-livedata:1.5.4")
     implementation("androidx.wear.compose:compose-foundation:1.2.0")
 
-    implementation("androidx.health:health-services-client:1.0.0-beta03")
+    implementation("androidx.health:health-services-client:1.0.0")
 
 
 
