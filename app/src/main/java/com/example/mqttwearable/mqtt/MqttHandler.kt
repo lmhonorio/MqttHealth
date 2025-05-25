@@ -40,6 +40,8 @@ import android.util.Log
 //>mosquitto_pub -h 192.168.68.102 -p 1883 -t teste -m ok
 // adb connect 192.168.68.112:41751
 // adb -s 192.168.68.123:41751 install -r app/build/outputs/apk/debug/app-debug.apk
+//PS C:\Users\lmhon\Dropbox\Projetos\Sto Antonio 5.0\MqttHealth> adb -s 192.168.68.112:42601 logcat  -c
+//PS C:\Users\lmhon\Dropbox\Projetos\Sto Antonio 5.0\MqttHealth> adb -s 192.168.68.112:42601 logcat HealthPublisher:D *:S
 
 
 

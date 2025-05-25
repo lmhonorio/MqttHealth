@@ -156,22 +156,22 @@ public class HealthPublisher(
             DataType.HEART_RATE_BPM,
             measureCallback
         )  // :contentReference[oaicite:1]{index=1}
-        measureClient.unregisterMeasureCallbackAsync(
-            DataType.STEPS,
-            measureCallback
-        )
-        measureClient.unregisterMeasureCallbackAsync(
-            DataType.CALORIES,
-            measureCallback
-        )
-        measureClient.unregisterMeasureCallbackAsync(
-            DataType.DISTANCE,
-            measureCallback
-        )
-        measureClient.unregisterMeasureCallbackAsync(
-            DataType.FLOORS,
-            measureCallback
-        )
+//        measureClient.unregisterMeasureCallbackAsync(
+//            DataType.STEPS,
+//            measureCallback
+//        )
+//        measureClient.unregisterMeasureCallbackAsync(
+//            DataType.CALORIES,
+//            measureCallback
+//        )
+//        measureClient.unregisterMeasureCallbackAsync(
+//            DataType.DISTANCE,
+//            measureCallback
+//        )
+//        measureClient.unregisterMeasureCallbackAsync(
+//            DataType.FLOORS,
+//            measureCallback
+//        )
     }
 
     /** Registra o listener para os tipos de dados desejados. */
@@ -179,10 +179,10 @@ public class HealthPublisher(
         val config = PassiveListenerConfig.builder()
             .setDataTypes(
                 setOf(
-                    DataType.HEART_RATE_BPM,
-                    DataType.STEPS,
-                    DataType.CALORIES,
-                    DataType.DISTANCE
+                   DataType.HEART_RATE_BPM
+//                    DataType.STEPS,
+//                    DataType.CALORIES,
+//                    DataType.DISTANCE
                 )
             )
             .build()

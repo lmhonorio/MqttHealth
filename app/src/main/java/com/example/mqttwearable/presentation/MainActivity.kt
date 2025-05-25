@@ -6,6 +6,11 @@
 package com.example.mqttwearable.presentation
 
 
+import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Bundle
 import android.renderscript.Element
 import androidx.activity.ComponentActivity
@@ -52,6 +57,8 @@ import androidx.lifecycle.lifecycleScope
 import com.example.mqttwearable.R
 import com.example.mqttwearable.mqtt.MqttHandler
 import com.example.mqttwearable.health.HealthPublisher
+import androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions
+import androidx.activity.result.ActivityResultLauncher
 
 //private const val SERVER_URI = "tcp://192.168.0.157:1883"
 private const val SERVER_URI = "tcp://192.168.68.102:1883" //mosquitto_sub -h 192.168.0.112 -p 1883 -t "teste" -v
@@ -64,13 +71,27 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var healthPublisher: HealthPublisher
 
+    private val requiredPermissions = arrayOf(
+        android.Manifest.permission.ACTIVITY_RECOGNITION,
+        android.Manifest.permission.BODY_SENSORS,
+        android.Manifest.permission.ACCESS_FINE_LOCATION
+    )
+
+    // 2) Crie o launcher que vai pedir essas permissões
+    private lateinit var permissionsLauncher: ActivityResultLauncher<Array<String>>
+
+
+
     val activeTypes: Set<DeltaDataType<*, *>> = setOf(
         DataType.STEPS,     // é um DeltaDataType<Int, SampleDataPoint<Int>>
         DataType.CALORIES,  // é um DeltaDataType<Float, SampleDataPoint<Float>>
         DataType.DISTANCE,   // é um DeltaDataType<Float, SampleDataPoint<Float>>
-        DataType.HEART_RATE_BPM,
-        DataType.ABSOLUTE_ELEVATION
+        DataType.PACE,   // é um DeltaDataType<Float, SampleDataPoint<Float>>
+        DataType.HEART_RATE_BPM
+//        DataType.ABSOLUTE_ELEVATION
     )
+
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
@@ -80,6 +101,24 @@ class MainActivity : ComponentActivity() {
         setTheme(android.R.style.Theme_DeviceDefault)
 
         mqttHandler = MqttHandler(applicationContext)
+        healthPublisher = HealthPublisher(applicationContext, mqttHandler)
+
+        permissionsLauncher = registerForActivityResult(RequestMultiplePermissions()) { results ->
+            // results é um Map<String, Boolean>
+            if (results.values.all { it }) {
+                // ✅ Todas concedidas: agora podemos registrar o HealthPublisher
+                lifecycleScope.launch {
+                    //healthPublisher.startPassiveMeasure()
+                    healthPublisher.startActiveMeasurementsBatch(activeTypes)
+                }
+            } else {
+                // ❌ Alguma permissão foi negada
+                Log.e("MainActivity", "Permissões de Health Services não concedidas")
+                // Aqui você pode mostrar um diálogo ou desabilitar funcionalidades
+            }
+        }
+
+
 
         // Conectar ao broker
         CoroutineScope(Dispatchers.IO).launch {
@@ -87,23 +126,31 @@ class MainActivity : ComponentActivity() {
                 brokerUrl = SERVER_URI,
                 clientId = "wearable-${System.currentTimeMillis()}"
             ) { success ->
-                if (success) {
-                    Log.d("MainActivity", "Successfully connected to MQTT broker")
-                } else {
-                    Log.e("MainActivity", "Failed to connect to MQTT broker")
-                }
+                if (success) Log.d("MainActivity", "Connected to MQTT broker")
+                else Log.e("MainActivity", "Failed to connect to MQTT broker")
             }
         }
 
-        // Cria o HealthPublisher
-        healthPublisher = HealthPublisher(
-            context = applicationContext,
-            mqttHandler = mqttHandler
-        )
 
         setContent {
             WearApp("Android", MqttHandler(applicationContext))
         }
+    }
+
+
+    override fun onStart() {
+        super.onStart()
+
+        permissionsLauncher.launch(requiredPermissions)
+
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // 4) Cancela o listener antes da Activity parar
+       // healthPublisher.stopPassiveMeasure()
+        //healthPublisher.stopActiveMeasure()
+        healthPublisher.stopActiveMeasurementsBatch(activeTypes)
     }
 
     override fun onDestroy() {
@@ -113,32 +160,9 @@ class MainActivity : ComponentActivity() {
             Log.d("MainActivity", "MQTT disconnected")
         }
     }
-
-    override fun onStart() {
-        super.onStart()
-        // 3) Registra o listener assim que a Activity estiver visível
-        lifecycleScope.launch {
-            try {
-                healthPublisher.startPassiveMeasure()
-
-                //healthPublisher.startActiveMeasure()
-                // bate lote ativo para HEART_RATE_BPM, STEPS, etc.
-                healthPublisher.startActiveMeasurementsBatch(activeTypes)
-
-            } catch (e: Exception) {
-                Log.e("MainActivity", "Falha ao registrar listener: $e")
-            }
-        }
-    }
-
-    override fun onStop() {
-        super.onStop()
-        // 4) Cancela o listener antes da Activity parar
-        healthPublisher.stopPassiveMeasure()
-        //healthPublisher.stopActiveMeasure()
-        healthPublisher.stopActiveMeasurementsBatch(activeTypes)
-    }
 }
+
+
 
 
 
@@ -177,7 +201,7 @@ fun WearApp(greetingName: String, mqttHandler: MqttHandler) {
                         // MQTT Connection and Publish
                         CoroutineScope(Dispatchers.IO).launch {
                             try {
-                                mqttHandler.publish(TOPIC, "Button clicked via mqtthandler!")
+
                                 val persistence = MemoryPersistence()
                                 val client = MqttClient(SERVER_URI, MqttClient.generateClientId(), persistence)
                                 val options = MqttConnectOptions()
@@ -193,6 +217,7 @@ fun WearApp(greetingName: String, mqttHandler: MqttHandler) {
                                 Log.e("MainActivity", "MQTT error", e)
                             }
                         }
+                        measureStepsNow(context, mqttHandler)
 
                     },
                     modifier = Modifier.size(ButtonDefaults.DefaultButtonSize),
@@ -226,4 +251,37 @@ fun Greeting(greetingName: String) {
 fun DefaultPreview() {
     val context = LocalContext.current
     WearApp("Preview Android", MqttHandler(context))
+}
+
+/**
+ * Faz uma leitura única do contador de passos e publica via MQTT.
+ */
+fun measureStepsNow(context: Context, mqttHandler: MqttHandler) {
+    // Uso da API tipada para SensorManager, evita cast inseguro
+    val sensorManager = context.getSystemService(SensorManager::class.java)
+        ?: return
+    val stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
+        ?: return
+
+    val listener = object : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent) {
+            sensorManager.unregisterListener(this)
+            val steps = event.values.firstOrNull()?.toLong() ?: return
+            CoroutineScope(Dispatchers.IO).launch {
+                mqttHandler.publish(TOPIC, "Steps now: $steps")
+                val persistence = MemoryPersistence()
+                val client = MqttClient(SERVER_URI, MqttClient.generateClientId(), persistence)
+                val options = MqttConnectOptions()
+                options.isCleanSession = true
+                client.connect(options)
+
+                val message = MqttMessage("Steps now: $steps".toByteArray())
+                client.publish(TOPIC, message)
+
+                client.disconnect()
+            }
+        }
+        override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) {}
+    }
+    sensorManager.registerListener(listener, stepSensor, SensorManager.SENSOR_DELAY_NORMAL)
 }
