@@ -13,6 +13,7 @@ import androidx.health.services.client.data.DataType
 import androidx.health.services.client.data.DataTypeAvailability
 import androidx.health.services.client.data.DeltaDataType
 import androidx.health.services.client.data.PassiveListenerConfig
+import androidx.health.services.client.getCapabilities
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -31,22 +32,26 @@ public class HealthPublisher(
     // Callback que recebe os lotes de dados enquanto o app está rodando em foreground
     private val passiveListener = object : PassiveListenerCallback {
         override fun onNewDataPointsReceived(dataPoints: DataPointContainer) {
-            // Heart rate (Float)
-            dataPoints.getData(DataType.HEART_RATE_BPM).forEach { hrPoint ->
-                send("HeartRate: ${hrPoint.value}")
-            }
-            // Steps (Int or Long, conforme dispositivo)
-            dataPoints.getData(DataType.STEPS).forEach { stepPoint ->
-                send("Steps: ${stepPoint.value}")
-            }
-            // Calories (Float)
-            dataPoints.getData(DataType.CALORIES).forEach { calPoint ->
-                send("Calories: ${calPoint.value}")
-            }
-            // Distance (Float, metros)
-            dataPoints.getData(DataType.DISTANCE).forEach { distPoint ->
-                send("Distance: ${distPoint.value}")
-            }
+            dataPoints.getData(DataType.HEART_RATE_BPM)
+                .forEach { send("HeartRate: ${it.value} bpm") }
+
+            dataPoints.getData(DataType.STEPS)
+                .forEach { send("Steps: ${it.value}") }
+
+            dataPoints.getData(DataType.CALORIES)
+                .forEach { send("Calories: ${it.value} kcal") }
+
+            dataPoints.getData(DataType.DISTANCE)
+                .forEach { send("Distance: ${it.value} m") }
+
+            dataPoints.getData(DataType.FLOORS)
+                .forEach { send("Floors: ${it.value} unit") }
+
+            dataPoints.getData(DataType.DISTANCE_DAILY)
+                .forEach { send("Daily Distance : ${it.value} m") }
+
+            dataPoints.getData(DataType.ELEVATION_GAIN)
+                .forEach { send("ELEVATION_GAIN : ${it.value} m") }
         }
 
         private fun send(message: String) {
@@ -58,141 +63,27 @@ public class HealthPublisher(
     }
 
 
-    // CALLBACK para medições ativas
-    private val measureCallback = object : MeasureCallback {
-        override fun onAvailabilityChanged(
-            dataType: DeltaDataType<*, *>,
-            availability: Availability
-        ) {
-            if (availability is DataTypeAvailability) {
-                Log.d("HealthPublisher", "Availability for $dataType: $availability")
-            }
-        }
-
-        override fun onDataReceived(dataPoints: DataPointContainer) {
-            // Exemplo para HEART_RATE_BPM; repita register/unregister para cada tipo ativo
-            dataPoints.getData(DataType.HEART_RATE_BPM).forEach { point ->
-                send("Active HEART_RATE_BPM: ${point.value}")
-            }
-            // Steps (Int or Long, conforme dispositivo)
-            dataPoints.getData(DataType.STEPS).forEach { stepPoint ->
-                send("Steps: ${stepPoint.value}")
-            }
-            // Calories (Float)
-            dataPoints.getData(DataType.CALORIES).forEach { calPoint ->
-                send("Calories: ${calPoint.value}")
-            }
-            // Distance (Float, metros)
-            dataPoints.getData(DataType.DISTANCE).forEach { distPoint ->
-                send("Distance: ${distPoint.value}")
-            }
-        }
-
-        override fun onRegistered() {
-            super.onRegistered()
-            Log.d("HealthPublisher", "MeasureCallback registered")
-        }
-
-        override fun onRegistrationFailed(throwable: Throwable) {
-            super.onRegistrationFailed(throwable)
-            Log.e("HealthPublisher", "MeasureCallback failed", throwable)
-        }
-
-        private fun send(message: String) {
-            CoroutineScope(Dispatchers.IO).launch {
-                mqttHandler.publish("health/data", message)
-            }
-        }
-    }
-
-    /** Registra medições ativas “batch” (um por um) para os tipos desejados. */
-    fun startActiveMeasurementsBatch(types: Set<DeltaDataType<*, *>>) {
-        types.forEach { dt ->
-            measureClient.registerMeasureCallback(dt, measureCallback)  // :contentReference[oaicite:0]{index=0}
-            Log.d("HealthPublisher", "Active listener started for $dt")
-        }
-    }
-
-    /** Cancela todas as medições ativas registradas em batch. */
-    fun stopActiveMeasurementsBatch(types: Set<DeltaDataType<*, *>>) {
-        types.forEach { dt ->
-            measureClient.unregisterMeasureCallbackAsync(dt, measureCallback)  // :contentReference[oaicite:1]{index=1}
-            Log.d("HealthPublisher", "Active listener stopped for $dt")
-        }
-    }
-
-
-
-    // para registrar o callback ativo:
-    fun startActiveMeasure() {
-        measureClient.registerMeasureCallback(
-            DataType.HEART_RATE_BPM,
-            measureCallback
-        )  // :contentReference[oaicite:1]{index=1}
-        measureClient.registerMeasureCallback(
-            DataType.STEPS,
-            measureCallback
-        )
-        measureClient.registerMeasureCallback(
-            DataType.CALORIES,
-            measureCallback
-        )
-        measureClient.registerMeasureCallback(
-            DataType.DISTANCE,
-            measureCallback
-        )
-        measureClient.registerMeasureCallback(
-            DataType.FLOORS,
-            measureCallback
-        )
-    }
-
-
-
-    // para desregistrar:
-    fun stopActiveMeasure() {
-
-        measureClient.unregisterMeasureCallbackAsync(
-            DataType.HEART_RATE_BPM,
-            measureCallback
-        )  // :contentReference[oaicite:1]{index=1}
-//        measureClient.unregisterMeasureCallbackAsync(
-//            DataType.STEPS,
-//            measureCallback
-//        )
-//        measureClient.unregisterMeasureCallbackAsync(
-//            DataType.CALORIES,
-//            measureCallback
-//        )
-//        measureClient.unregisterMeasureCallbackAsync(
-//            DataType.DISTANCE,
-//            measureCallback
-//        )
-//        measureClient.unregisterMeasureCallbackAsync(
-//            DataType.FLOORS,
-//            measureCallback
-//        )
-    }
 
     /** Registra o listener para os tipos de dados desejados. */
-    fun startPassiveMeasure() {
+    suspend fun startPassiveMeasure() {
+        val types = setOf(
+            DataType.CALORIES,        // calorias
+            DataType.DISTANCE,        // distância (m)
+            DataType.ELEVATION_GAIN,
+            DataType.FLOORS,
+            DataType.DISTANCE_DAILY,
+            DataType.STEPS,
+            DataType.HEART_RATE_BPM  // batimentos
+        )
         val config = PassiveListenerConfig.builder()
-            .setDataTypes(
-                setOf(
-                   DataType.HEART_RATE_BPM
-//                    DataType.STEPS,
-//                    DataType.CALORIES,
-//                    DataType.DISTANCE
-                )
-            )
+            .setDataTypes(types)
             .build()
+        passiveMonitoringClient.setPassiveListenerCallback(config, passiveListener)
+        Log.d("HealthPublisher", "PassiveListener registered for $types")
 
-        passiveMonitoringClient.setPassiveListenerCallback(
-            config,
-            passiveListener
-        ) // :contentReference[oaicite:0]{index=0}
-
-        Log.d("HealthPublisher", "PassiveListener registered")
+        val capabilities = passiveMonitoringClient.getCapabilities().supportedDataTypesPassiveMonitoring
+        Log.d("HealthPublisher", "Supported passive types: ${capabilities}")
+        mqttHandler.publish("teste",  "Supported passive types: ${capabilities}")
     }
 
     /** Cancela o listener */
