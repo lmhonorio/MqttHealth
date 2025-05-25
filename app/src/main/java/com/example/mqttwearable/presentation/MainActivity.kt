@@ -5,13 +5,14 @@
 
 package com.example.mqttwearable.presentation
 
+
 import android.os.Bundle
+import android.renderscript.Element
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.ui.platform.LocalContext
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -45,17 +46,31 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.remember
+import androidx.health.services.client.data.DataType
+import androidx.health.services.client.data.DeltaDataType
+import androidx.lifecycle.lifecycleScope
 import com.example.mqttwearable.R
-import com.example.mqttwearable.presentation.theme.MqttwearableTheme
 import com.example.mqttwearable.mqtt.MqttHandler
+import com.example.mqttwearable.health.HealthPublisher
 
-private const val SERVER_URI = "tcp://192.168.0.157:1883"
+//private const val SERVER_URI = "tcp://192.168.0.157:1883"
+private const val SERVER_URI = "tcp://192.168.68.102:1883" //mosquitto_sub -h 192.168.0.112 -p 1883 -t "teste" -v
 private const val TOPIC = "teste"
 
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var mqttHandler: MqttHandler
+
+    private lateinit var healthPublisher: HealthPublisher
+
+    val activeTypes: Set<DeltaDataType<*, *>> = setOf(
+        DataType.STEPS,     // é um DeltaDataType<Int, SampleDataPoint<Int>>
+        DataType.CALORIES,  // é um DeltaDataType<Float, SampleDataPoint<Float>>
+        DataType.DISTANCE,   // é um DeltaDataType<Float, SampleDataPoint<Float>>
+        DataType.HEART_RATE_BPM,
+        DataType.ABSOLUTE_ELEVATION
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
@@ -80,6 +95,12 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Cria o HealthPublisher
+        healthPublisher = HealthPublisher(
+            context = applicationContext,
+            mqttHandler = mqttHandler
+        )
+
         setContent {
             WearApp("Android", MqttHandler(applicationContext))
         }
@@ -92,7 +113,36 @@ class MainActivity : ComponentActivity() {
             Log.d("MainActivity", "MQTT disconnected")
         }
     }
+
+    override fun onStart() {
+        super.onStart()
+        // 3) Registra o listener assim que a Activity estiver visível
+        lifecycleScope.launch {
+            try {
+                healthPublisher.startPassiveMeasure()
+
+                //healthPublisher.startActiveMeasure()
+                // bate lote ativo para HEART_RATE_BPM, STEPS, etc.
+                healthPublisher.startActiveMeasurementsBatch(activeTypes)
+
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Falha ao registrar listener: $e")
+            }
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // 4) Cancela o listener antes da Activity parar
+        healthPublisher.stopPassiveMeasure()
+        //healthPublisher.stopActiveMeasure()
+        healthPublisher.stopActiveMeasurementsBatch(activeTypes)
+    }
 }
+
+
+
+
 
 @Composable
 fun WearApp(greetingName: String, mqttHandler: MqttHandler) {

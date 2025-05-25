@@ -14,6 +14,35 @@ import org.eclipse.paho.client.mqttv3.IMqttToken
 import org.eclipse.paho.client.mqttv3.MqttCallback
 import android.util.Log
 
+//sudo nano /etc/mosquitto/mosquitto.conf
+//# Permite conexões de qualquer IP (não apenas localhost)
+//listener 1883 0.0.0.0
+//
+//# Habilita autenticação anônima (apenas para testes)
+//allow_anonymous true
+//
+
+//cmd
+//No servidor (Windows):
+//Verifique se o Mosquitto está rodando:
+//
+//cmd
+//netstat -ano | findstr 1883
+//(Deve aparecer 0.0.0.0:1883).
+//netstat -ano | findstr 1883
+//A saída deve mostrar:
+//
+//TCP    0.0.0.0:1883          0.0.0.0:0              LISTENING       <PID>
+//TCP    [::]:1883             [::]:0                 LISTENING       <PID>
+////netsh advfirewall firewall add rule name="MQTT" dir=in action=allow protocol=TCP localport=1883
+//mosquitto -v -c mosquitto.conf
+//mosquitto_sub -h 192.168.68.102 -p 1883 -t "teste" -v
+//>mosquitto_pub -h 192.168.68.102 -p 1883 -t teste -m ok
+// adb connect 192.168.68.112:41751
+// adb -s 192.168.68.123:41751 install -r app/build/outputs/apk/debug/app-debug.apk
+
+
+
 
 class MqttHandler(private val context: Context) {
     private var client: MqttClient? = null

@@ -1,3 +1,6 @@
+//https://developer.android.com/health-and-fitness/guides/health-services/active-data/measure-client?hl=pt-br
+
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -93,7 +96,7 @@ dependencies {
     implementation("androidx.compose.runtime:runtime-livedata:1.5.4")
     implementation("androidx.wear.compose:compose-foundation:1.2.0")
 
-    implementation("androidx.health:health-services-client:1.0.0")
+    implementation("androidx.health:health-services-client:1.1.0-alpha05")
 
 
 
